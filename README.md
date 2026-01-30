@@ -8,6 +8,8 @@ A Go SDK for interacting with the auth-service microservice. This SDK provides a
 go get github.com/kerimovok/auth-service-sdk-go
 ```
 
+The SDK depends on `github.com/kerimovok/go-pkg-utils` for HMAC-signed HTTP requests; it is resolved automatically via `go mod`.
+
 ## Features
 
 - **HMAC Authentication**: All requests are automatically signed with HMAC-SHA256
@@ -98,6 +100,14 @@ resp, err := client.ListUsers(authsdk.ListUsersRequest{
 // Access pagination: resp.Pagination
 // Each user in resp.Data contains: ID, Email, EmailVerified, Blocked,
 //                                   LastLoginAt, PasswordChangedAt, CreatedAt
+```
+
+#### DeleteUser
+
+Soft-deletes a user by ID.
+
+```go
+err := client.DeleteUser("user-uuid")
 ```
 
 #### VerifyCredentials
@@ -274,12 +284,13 @@ Use `authsdk.IsAPIError(err)` to check if an error is an `APIError` and extract 
 
 ### Standard Responses
 
-All responses include:
+Responses typically include:
 - `success`: Boolean indicating success/failure
 - `message`: Human-readable message
 - `status`: HTTP status code
-- `timestamp`: ISO 8601 timestamp
 - `data`: Response data (varies by endpoint)
+
+List and get-by-id responses also include `timestamp` (ISO 8601).
 
 ### Paginated Responses
 
