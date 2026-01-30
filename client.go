@@ -2,6 +2,7 @@ package authsdk
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,29 @@ import (
 	"time"
 
 	"github.com/kerimovok/go-pkg-utils/hmac"
+)
+
+const (
+	apiPathPrefix   = "/api/v1"
+	defaultTimeout  = 10 * time.Second
+	tokenTypeReset  = "password_reset"
+	tokenTypeVerify = "email_verify"
+	sessionActive   = "active"
+	sessionRevoked  = "revoked"
+	sessionExpired  = "expired"
+)
+
+// TokenType constants for CreateTokenRequest
+const (
+	TokenTypePasswordReset = tokenTypeReset
+	TokenTypeEmailVerify   = tokenTypeVerify
+)
+
+// SessionStatus constants for ListSessionsRequest
+const (
+	SessionStatusActive  = sessionActive
+	SessionStatusRevoked = sessionRevoked
+	SessionStatusExpired = sessionExpired
 )
 
 // Config holds configuration for the auth service client
@@ -39,12 +63,10 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("auth service returned status %d: %s", e.StatusCode, e.Body)
 }
 
-// IsAPIError checks if an error is an APIError and returns it
+// IsAPIError checks if an error is an APIError and returns it (use errors.As for idiomatic checks)
 func IsAPIError(err error) (*APIError, bool) {
-	if err == nil {
-		return nil, false
-	}
-	if apiErr, ok := err.(*APIError); ok {
+	var apiErr *APIError
+	if err != nil && errors.As(err, &apiErr) {
 		return apiErr, true
 	}
 	return nil, false
@@ -81,6 +103,42 @@ func parseErrorResponse(statusCode int, body []byte) *APIError {
 	}
 }
 
+// statusIn returns true if code is in the slice
+func statusIn(code int, codes []int) bool {
+	for _, c := range codes {
+		if code == c {
+			return true
+		}
+	}
+	return false
+}
+
+// do performs a request, checks status, and optionally decodes JSON into result.
+// successStatuses lists HTTP status codes treated as success (e.g. 200, 201).
+// If result is non-nil it must be a pointer; the response body is decoded into it.
+func (c *Client) do(method, path string, body interface{}, successStatuses []int, result interface{}, wrapErr string) error {
+	resp, err := c.client.DoRequest(method, path, body)
+	if err != nil {
+		return fmt.Errorf("%s: %w", wrapErr, err)
+	}
+	defer resp.Body.Close()
+
+	if !statusIn(resp.StatusCode, successStatuses) {
+		respBody, _ := io.ReadAll(resp.Body)
+		return parseErrorResponse(resp.StatusCode, respBody)
+	}
+
+	if result != nil {
+		if err := hmac.ParseJSONResponse(resp, result); err != nil {
+			return fmt.Errorf("%s: %w", wrapErr, err)
+		}
+	}
+	return nil
+}
+
+// pathSeg escapes a path segment (e.g. userID, sessionID) for use in URLs
+func pathSeg(s string) string { return url.PathEscape(s) }
+
 // NewClient creates a new auth service client
 func NewClient(config Config) (*Client, error) {
 	if config.BaseURL == "" {
@@ -90,13 +148,14 @@ func NewClient(config Config) (*Client, error) {
 		return nil, fmt.Errorf("HMAC secret is required")
 	}
 
+	baseURL := strings.TrimRight(config.BaseURL, "/")
 	timeout := config.Timeout
 	if timeout == 0 {
-		timeout = 10 * time.Second
+		timeout = defaultTimeout
 	}
 
 	hmacClient := hmac.NewClient(hmac.Config{
-		BaseURL:    config.BaseURL,
+		BaseURL:    baseURL,
 		HMACSecret: config.HMACSecret,
 		Timeout:    timeout,
 	})
@@ -123,22 +182,11 @@ type CreateUserResponse struct {
 
 // CreateUser creates a new user in auth-service
 func (c *Client) CreateUser(req CreateUserRequest) (*CreateUserResponse, error) {
-	resp, err := c.client.DoRequest("POST", "/api/v1/users", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result CreateUserResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/users", req, []int{http.StatusOK, http.StatusCreated}, &result, "failed to create user")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -162,22 +210,11 @@ type VerifyCredentialsResponse struct {
 
 // VerifyCredentials verifies user credentials
 func (c *Client) VerifyCredentials(req VerifyCredentialsRequest) (*VerifyCredentialsResponse, error) {
-	resp, err := c.client.DoRequest("POST", "/api/v1/auth/verify", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify credentials: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result VerifyCredentialsResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/auth/verify", req, []int{http.StatusOK}, &result, "failed to verify credentials")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -202,22 +239,11 @@ type CreateSessionResponse struct {
 
 // CreateSession creates a new session
 func (c *Client) CreateSession(req CreateSessionRequest) (*CreateSessionResponse, error) {
-	resp, err := c.client.DoRequest("POST", "/api/v1/sessions", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result CreateSessionResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/sessions", req, []int{http.StatusOK, http.StatusCreated}, &result, "failed to create session")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -240,39 +266,17 @@ type ValidateSessionResponse struct {
 // ValidateSession validates a session
 func (c *Client) ValidateSession(sessionID, secret string) (*ValidateSessionResponse, error) {
 	req := ValidateSessionRequest{Secret: secret}
-	resp, err := c.client.DoRequest("POST", fmt.Sprintf("/api/v1/sessions/%s/validate", sessionID), req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to validate session: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result ValidateSessionResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/sessions/"+pathSeg(sessionID)+"/validate", req, []int{http.StatusOK}, &result, "failed to validate session")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
 // RevokeSession revokes a session
 func (c *Client) RevokeSession(sessionID string) error {
-	resp, err := c.client.DoRequest("POST", fmt.Sprintf("/api/v1/sessions/%s/revoke", sessionID), nil)
-	if err != nil {
-		return fmt.Errorf("failed to revoke session: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return parseErrorResponse(resp.StatusCode, body)
-	}
-
-	return nil
+	return c.do("POST", apiPathPrefix+"/sessions/"+pathSeg(sessionID)+"/revoke", nil, []int{http.StatusOK}, nil, "failed to revoke session")
 }
 
 // CreateTokenRequest represents a request to create a token
@@ -294,22 +298,11 @@ type CreateTokenResponse struct {
 
 // CreateToken creates a token (password reset or email verification)
 func (c *Client) CreateToken(req CreateTokenRequest) (*CreateTokenResponse, error) {
-	resp, err := c.client.DoRequest("POST", "/api/v1/tokens", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result CreateTokenResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/tokens", req, []int{http.StatusOK, http.StatusCreated}, &result, "failed to create token")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -328,22 +321,11 @@ type VerifyEmailResponse struct {
 // VerifyEmail verifies an email using a token
 func (c *Client) VerifyEmail(token string) (*VerifyEmailResponse, error) {
 	req := VerifyEmailRequest{Token: token}
-	resp, err := c.client.DoRequest("POST", "/api/v1/auth/verify-email", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify email: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result VerifyEmailResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/auth/verify-email", req, []int{http.StatusOK}, &result, "failed to verify email")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -362,22 +344,11 @@ type ResetPasswordResponse struct {
 
 // ResetPassword resets a user's password
 func (c *Client) ResetPassword(req ResetPasswordRequest) (*ResetPasswordResponse, error) {
-	resp, err := c.client.DoRequest("POST", "/api/v1/auth/reset-password", req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to reset password: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result ResetPasswordResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("POST", apiPathPrefix+"/auth/reset-password", req, []int{http.StatusOK}, &result, "failed to reset password")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -400,39 +371,17 @@ type GetUserResponse struct {
 
 // GetUser gets a user by ID
 func (c *Client) GetUser(userID string) (*GetUserResponse, error) {
-	resp, err := c.client.DoRequest("GET", fmt.Sprintf("/api/v1/users/%s", userID), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result GetUserResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK}, &result, "failed to get user")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
 // DeleteUser soft-deletes a user by ID
 func (c *Client) DeleteUser(userID string) error {
-	resp, err := c.client.DoRequest("DELETE", fmt.Sprintf("/api/v1/users/%s", userID), nil)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return parseErrorResponse(resp.StatusCode, body)
-	}
-
-	return nil
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to delete user")
 }
 
 // ListUsersRequest represents query parameters for listing users
@@ -468,13 +417,13 @@ type Pagination struct {
 
 // GetUserResponseData represents a single user in the list
 type GetUserResponseData struct {
-	ID                string `json:"id"`
-	Email             string `json:"email"`
-	EmailVerified     bool   `json:"emailVerified"`
-	Blocked           bool   `json:"blocked"`
-	LastLoginAt       string `json:"lastLoginAt,omitempty"`
-	PasswordChangedAt string `json:"passwordChangedAt,omitempty"`
-	CreatedAt         string `json:"createdAt"`
+	ID                string  `json:"id"`
+	Email             string  `json:"email"`
+	EmailVerified     bool    `json:"emailVerified"`
+	Blocked           bool    `json:"blocked"`
+	LastLoginAt       *string `json:"lastLoginAt,omitempty"`
+	PasswordChangedAt *string `json:"passwordChangedAt,omitempty"`
+	CreatedAt         string  `json:"createdAt"`
 }
 
 // ListUsers lists users with optional filters
@@ -498,27 +447,16 @@ func (c *Client) ListUsers(req ListUsersRequest) (*ListUsersResponse, error) {
 		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
 	}
 
-	path := "/api/v1/users"
+	path := apiPathPrefix + "/users"
 	if len(queryParams) > 0 {
 		path += "?" + strings.Join(queryParams, "&")
 	}
 
-	resp, err := c.client.DoRequest("GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list users: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result ListUsersResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list users")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -577,27 +515,16 @@ func (c *Client) ListSessions(req ListSessionsRequest) (*ListSessionsResponse, e
 		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
 	}
 
-	path := "/api/v1/sessions"
+	path := apiPathPrefix + "/sessions"
 	if len(queryParams) > 0 {
 		path += "?" + strings.Join(queryParams, "&")
 	}
 
-	resp, err := c.client.DoRequest("GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list sessions: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result ListSessionsResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list sessions")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -612,22 +539,11 @@ type GetSessionResponse struct {
 
 // GetSession gets a session by ID
 func (c *Client) GetSession(sessionID string) (*GetSessionResponse, error) {
-	resp, err := c.client.DoRequest("GET", fmt.Sprintf("/api/v1/sessions/%s", sessionID), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get session: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result GetSessionResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", apiPathPrefix+"/sessions/"+pathSeg(sessionID), nil, []int{http.StatusOK}, &result, "failed to get session")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -681,27 +597,16 @@ func (c *Client) ListTokens(req ListTokensRequest) (*ListTokensResponse, error) 
 		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
 	}
 
-	path := "/api/v1/tokens"
+	path := apiPathPrefix + "/tokens"
 	if len(queryParams) > 0 {
 		path += "?" + strings.Join(queryParams, "&")
 	}
 
-	resp, err := c.client.DoRequest("GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tokens: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result ListTokensResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list tokens")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
 
@@ -716,21 +621,10 @@ type GetTokenResponse struct {
 
 // GetToken gets a token by ID
 func (c *Client) GetToken(tokenID string) (*GetTokenResponse, error) {
-	resp, err := c.client.DoRequest("GET", fmt.Sprintf("/api/v1/tokens/%s", tokenID), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, parseErrorResponse(resp.StatusCode, body)
-	}
-
 	var result GetTokenResponse
-	if err := hmac.ParseJSONResponse(resp, &result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	err := c.do("GET", apiPathPrefix+"/tokens/"+pathSeg(tokenID), nil, []int{http.StatusOK}, &result, "failed to get token")
+	if err != nil {
+		return nil, err
 	}
-
 	return &result, nil
 }
