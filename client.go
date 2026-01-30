@@ -384,15 +384,6 @@ func (c *Client) DeleteUser(userID string) error {
 	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to delete user")
 }
 
-// ListUsersRequest represents query parameters for listing users
-type ListUsersRequest struct {
-	Email         string // Filter by email (exact match using email_eq)
-	EmailVerified *bool  // Filter by email_verified status
-	Blocked       *bool  // Filter by blocked status
-	Page          int    // Page number (default: 1)
-	PerPage       int    // Items per page (default: 20, max: 100)
-}
-
 // ListUsersResponse represents the paginated response from listing users
 type ListUsersResponse struct {
 	Success    bool                  `json:"success"`
@@ -426,48 +417,19 @@ type GetUserResponseData struct {
 	CreatedAt         string  `json:"createdAt"`
 }
 
-// ListUsers lists users with optional filters
-func (c *Client) ListUsers(req ListUsersRequest) (*ListUsersResponse, error) {
-	// Build query string
-	queryParams := make([]string, 0)
-
-	if req.Email != "" {
-		queryParams = append(queryParams, fmt.Sprintf("email_eq=%s", url.QueryEscape(req.Email)))
-	}
-	if req.EmailVerified != nil {
-		queryParams = append(queryParams, fmt.Sprintf("email_verified_eq=%t", *req.EmailVerified))
-	}
-	if req.Blocked != nil {
-		queryParams = append(queryParams, fmt.Sprintf("blocked_eq=%t", *req.Blocked))
-	}
-	if req.Page > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("page=%d", req.Page))
-	}
-	if req.PerPage > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
-	}
-
+// ListUsers lists users by forwarding the raw query string to auth-service.
+// Query can include page, per_page, sort_by, sort_order, and go-pkg-utils filter params (e.g. email_like=, created_at_gte=).
+func (c *Client) ListUsers(queryString string) (*ListUsersResponse, error) {
 	path := apiPathPrefix + "/users"
-	if len(queryParams) > 0 {
-		path += "?" + strings.Join(queryParams, "&")
+	if queryString != "" {
+		path += "?" + queryString
 	}
-
 	var result ListUsersResponse
 	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list users")
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
-}
-
-// ListSessionsRequest represents query parameters for listing sessions
-type ListSessionsRequest struct {
-	UserID    string // Filter by user_id (UUID)
-	Status    string // Filter by status: "active", "revoked", "expired"
-	IP        string // Filter by IP (supports operators like ip_like)
-	UserAgent string // Filter by user_agent (supports operators like user_agent_like)
-	Page      int    // Page number (default: 1)
-	PerPage   int    // Items per page (default: 20, max: 100)
 }
 
 // ListSessionsResponse represents the paginated response from listing sessions
@@ -491,35 +453,12 @@ type SessionListItem struct {
 	CreatedAt string  `json:"createdAt"`
 }
 
-// ListSessions lists sessions with optional filters
-func (c *Client) ListSessions(req ListSessionsRequest) (*ListSessionsResponse, error) {
-	// Build query string
-	queryParams := make([]string, 0)
-
-	if req.UserID != "" {
-		queryParams = append(queryParams, fmt.Sprintf("user_id=%s", url.QueryEscape(req.UserID)))
-	}
-	if req.Status != "" {
-		queryParams = append(queryParams, fmt.Sprintf("status=%s", url.QueryEscape(req.Status)))
-	}
-	if req.IP != "" {
-		queryParams = append(queryParams, fmt.Sprintf("ip_like=%s", url.QueryEscape(req.IP)))
-	}
-	if req.UserAgent != "" {
-		queryParams = append(queryParams, fmt.Sprintf("user_agent_like=%s", url.QueryEscape(req.UserAgent)))
-	}
-	if req.Page > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("page=%d", req.Page))
-	}
-	if req.PerPage > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
-	}
-
+// ListSessions lists sessions by forwarding the raw query string to auth-service.
+func (c *Client) ListSessions(queryString string) (*ListSessionsResponse, error) {
 	path := apiPathPrefix + "/sessions"
-	if len(queryParams) > 0 {
-		path += "?" + strings.Join(queryParams, "&")
+	if queryString != "" {
+		path += "?" + queryString
 	}
-
 	var result ListSessionsResponse
 	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list sessions")
 	if err != nil {
@@ -547,15 +486,6 @@ func (c *Client) GetSession(sessionID string) (*GetSessionResponse, error) {
 	return &result, nil
 }
 
-// ListTokensRequest represents query parameters for listing tokens
-type ListTokensRequest struct {
-	UserID  string // Filter by user_id (UUID)
-	Type    string // Filter by type: "password_reset" or "email_verify"
-	Status  string // Filter by status: "active", "used", "expired"
-	Page    int    // Page number (default: 1)
-	PerPage int    // Items per page (default: 20, max: 100)
-}
-
 // ListTokensResponse represents the paginated response from listing tokens
 type ListTokensResponse struct {
 	Success    bool            `json:"success"`
@@ -576,32 +506,12 @@ type TokenListItem struct {
 	CreatedAt string  `json:"createdAt"`
 }
 
-// ListTokens lists tokens with optional filters
-func (c *Client) ListTokens(req ListTokensRequest) (*ListTokensResponse, error) {
-	// Build query string
-	queryParams := make([]string, 0)
-
-	if req.UserID != "" {
-		queryParams = append(queryParams, fmt.Sprintf("user_id=%s", url.QueryEscape(req.UserID)))
-	}
-	if req.Type != "" {
-		queryParams = append(queryParams, fmt.Sprintf("type_eq=%s", url.QueryEscape(req.Type)))
-	}
-	if req.Status != "" {
-		queryParams = append(queryParams, fmt.Sprintf("status=%s", url.QueryEscape(req.Status)))
-	}
-	if req.Page > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("page=%d", req.Page))
-	}
-	if req.PerPage > 0 {
-		queryParams = append(queryParams, fmt.Sprintf("per_page=%d", req.PerPage))
-	}
-
+// ListTokens lists tokens by forwarding the raw query string to auth-service.
+func (c *Client) ListTokens(queryString string) (*ListTokensResponse, error) {
 	path := apiPathPrefix + "/tokens"
-	if len(queryParams) > 0 {
-		path += "?" + strings.Join(queryParams, "&")
+	if queryString != "" {
+		path += "?" + queryString
 	}
-
 	var result ListTokensResponse
 	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list tokens")
 	if err != nil {
