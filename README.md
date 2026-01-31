@@ -1,6 +1,8 @@
 # Auth Service SDK
 
-A Go SDK for interacting with the auth-service microservice. This SDK provides a type-safe client for all auth-service operations including user management, session handling, and token operations.
+A Go SDK for interacting with the auth-service microservice. This SDK provides a
+type-safe client for all auth-service operations including user management,
+session handling, and token operations.
 
 ## Installation
 
@@ -8,17 +10,16 @@ A Go SDK for interacting with the auth-service microservice. This SDK provides a
 go get github.com/kerimovok/auth-service-sdk-go
 ```
 
-The SDK depends on `github.com/kerimovok/go-pkg-utils` for HMAC-signed HTTP requests; it is resolved automatically via `go mod`.
-
 ## Features
 
-- **HMAC Authentication**: All requests are automatically signed with HMAC-SHA256
 - **Type-Safe**: Full type definitions for all requests and responses
 - **Error Handling**: Comprehensive error handling with detailed error messages
 - **User Management**: Create, get, and list users with filtering
 - **Session Management**: Create, validate, revoke, get, and list user sessions
-- **Token Management**: Create, verify, get, and list tokens for password reset and email verification
-- **Filtering & Pagination**: Support for filtering and pagination on list endpoints
+- **Token Management**: Create, verify, get, and list tokens for password reset
+  and email verification
+- **Filtering & Pagination**: Support for filtering and pagination on list
+  endpoints
 
 ## Quick Start
 
@@ -35,9 +36,8 @@ import (
 func main() {
     // Create client
     client, err := authsdk.NewClient(authsdk.Config{
-        BaseURL:    "http://localhost:3001",
-        HMACSecret: "your-shared-secret",
-        Timeout:    10 * time.Second,
+        BaseURL: "http://localhost:3001",
+        Timeout: 10 * time.Second,
     })
     if err != nil {
         panic(err)
@@ -246,15 +246,15 @@ resp, err := client.ListTokens(authsdk.ListTokensRequest{
 
 ## Configuration
 
-The SDK requires the following configuration:
+The SDK uses plain HTTP and requires:
 
 - **BaseURL**: The base URL of the auth-service (e.g., "http://localhost:3001")
-- **HMACSecret**: The shared secret for HMAC authentication
 - **Timeout**: Request timeout (optional, defaults to 10 seconds)
 
 ## Error Handling
 
-All methods return errors that can be checked. The SDK provides an `APIError` type for API-level errors:
+All methods return errors that can be checked. The SDK provides an `APIError`
+type for API-level errors:
 
 ```go
 resp, err := client.CreateUser(req)
@@ -274,17 +274,20 @@ if err != nil {
 ### APIError
 
 The `APIError` type provides:
+
 - `StatusCode`: HTTP status code from the API
 - `Message`: Error message from the API response
 - `Body`: Raw response body (useful for debugging)
 
-Use `authsdk.IsAPIError(err)` to check if an error is an `APIError` and extract detailed information.
+Use `authsdk.IsAPIError(err)` to check if an error is an `APIError` and extract
+detailed information.
 
 ## Response Structure
 
 ### Standard Responses
 
 Responses typically include:
+
 - `success`: Boolean indicating success/failure
 - `message`: Human-readable message
 - `status`: HTTP status code
@@ -295,6 +298,7 @@ List and get-by-id responses also include `timestamp` (ISO 8601).
 ### Paginated Responses
 
 List endpoints return paginated responses with:
+
 - `data`: Array of items
 - `pagination`: Pagination metadata object containing:
   - `page`: Current page number
@@ -309,6 +313,7 @@ List endpoints return paginated responses with:
 ### JSON Format
 
 All requests and responses use camelCase JSON field names:
+
 - `userId` (not `user_id`)
 - `emailVerified` (not `email_verified`)
 - `sessionId` (not `session_id`)

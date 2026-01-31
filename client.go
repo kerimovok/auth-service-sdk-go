@@ -1,6 +1,7 @@
 package authsdk
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/kerimovok/go-pkg-utils/hmac"
 )
 
 const (
@@ -38,14 +37,14 @@ const (
 
 // Config holds configuration for the auth service client
 type Config struct {
-	BaseURL    string        // Auth service base URL (e.g., "http://localhost:3001")
-	HMACSecret string        // Shared HMAC secret for authentication
-	Timeout    time.Duration // Request timeout (default: 10 seconds)
+	BaseURL string        // Auth service base URL (e.g., "http://localhost:3001")
+	Timeout time.Duration // Request timeout (default: 10 seconds)
 }
 
-// Client wraps the HMAC client for auth-service communication
+// Client is the auth service HTTP client (plain HTTP).
 type Client struct {
-	client *hmac.Client
+	baseURL    string
+	httpClient *http.Client
 }
 
 // APIError represents an error returned by the auth service API
@@ -117,7 +116,7 @@ func statusIn(code int, codes []int) bool {
 // successStatuses lists HTTP status codes treated as success (e.g. 200, 201).
 // If result is non-nil it must be a pointer; the response body is decoded into it.
 func (c *Client) do(method, path string, body interface{}, successStatuses []int, result interface{}, wrapErr string) error {
-	resp, err := c.client.DoRequest(method, path, body)
+	resp, err := c.doRequest(method, path, body)
 	if err != nil {
 		return fmt.Errorf("%s: %w", wrapErr, err)
 	}
@@ -129,23 +128,41 @@ func (c *Client) do(method, path string, body interface{}, successStatuses []int
 	}
 
 	if result != nil {
-		if err := hmac.ParseJSONResponse(resp, result); err != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
 			return fmt.Errorf("%s: %w", wrapErr, err)
 		}
 	}
 	return nil
 }
 
+// doRequest performs an HTTP request.
+func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
+	fullURL := c.baseURL + path
+	var bodyReader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal body: %w", err)
+		}
+		bodyReader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequest(method, fullURL, bodyReader)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return c.httpClient.Do(req)
+}
+
 // pathSeg escapes a path segment (e.g. userID, sessionID) for use in URLs
 func pathSeg(s string) string { return url.PathEscape(s) }
 
-// NewClient creates a new auth service client
+// NewClient creates a new auth service client (plain HTTP).
 func NewClient(config Config) (*Client, error) {
 	if config.BaseURL == "" {
 		return nil, fmt.Errorf("base URL is required")
-	}
-	if config.HMACSecret == "" {
-		return nil, fmt.Errorf("HMAC secret is required")
 	}
 
 	baseURL := strings.TrimRight(config.BaseURL, "/")
@@ -154,13 +171,10 @@ func NewClient(config Config) (*Client, error) {
 		timeout = defaultTimeout
 	}
 
-	hmacClient := hmac.NewClient(hmac.Config{
-		BaseURL:    baseURL,
-		HMACSecret: config.HMACSecret,
-		Timeout:    timeout,
-	})
-
-	return &Client{client: hmacClient}, nil
+	return &Client{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: timeout},
+	}, nil
 }
 
 // CreateUserRequest represents a request to create a user
