@@ -415,6 +415,22 @@ func (c *Client) DeleteUser(userID string) error {
 	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to delete user")
 }
 
+// UpdateUserRequest is the request body for updating a user (emailVerified, blocked)
+type UpdateUserRequest struct {
+	EmailVerified *bool `json:"emailVerified,omitempty"`
+	Blocked       *bool `json:"blocked,omitempty"`
+}
+
+// UpdateUser updates a user's emailVerified and blocked status (PATCH /api/v1/users/:id)
+func (c *Client) UpdateUser(userID string, req UpdateUserRequest) (*GetUserResponse, error) {
+	var result GetUserResponse
+	err := c.do("PATCH", apiPathPrefix+"/users/"+pathSeg(userID), req, []int{http.StatusOK}, &result, "failed to update user")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // ChangePasswordRequest is the request body for changing a user's password
 type ChangePasswordRequest struct {
 	OldPassword *string `json:"oldPassword,omitempty"` // Optional for admin reset
