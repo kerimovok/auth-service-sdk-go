@@ -14,8 +14,8 @@ go get github.com/kerimovok/auth-service-sdk-go
 
 - **Type-Safe**: Full type definitions for all requests and responses
 - **Error Handling**: Comprehensive error handling with detailed error messages
-- **User Management**: Create, get, and list users with filtering
-- **Session Management**: Create, validate, revoke, get, and list user sessions
+- **User Management**: Create, get, list, and delete users; change password and email
+- **Session Management**: Create, validate, revoke, get, and list user sessions; revoke all or other sessions ("log out everywhere" / "log out other devices")
 - **Token Management**: Create, verify, get, and list tokens for password reset
   and email verification
 - **Filtering & Pagination**: Support for filtering and pagination on list
@@ -110,6 +110,27 @@ Soft-deletes a user by ID.
 err := client.DeleteUser("user-uuid")
 ```
 
+#### ChangePassword
+
+Changes a user's password. For self-service, provide `OldPassword`; omit it for admin reset.
+
+```go
+err := client.ChangePassword("user-uuid", authsdk.ChangePasswordRequest{
+    OldPassword: &currentPassword, // optional; required for self-service
+    NewPassword: "newSecurePassword456",
+})
+```
+
+#### ChangeEmail
+
+Changes a user's email. The new email will be unverified until the user completes verification.
+
+```go
+err := client.ChangeEmail("user-uuid", authsdk.ChangeEmailRequest{
+    NewEmail: "newemail@example.com",
+})
+```
+
 #### VerifyCredentials
 
 Verifies user credentials (email and password).
@@ -126,13 +147,14 @@ resp, err := client.VerifyCredentials(authsdk.VerifyCredentialsRequest{
 
 #### CreateSession
 
-Creates a new session for a user.
+Creates a new session for a user. Set `RememberMe` to true for longer-lived sessions (when the auth-service is configured for it).
 
 ```go
 resp, err := client.CreateSession(authsdk.CreateSessionRequest{
-    UserID:    "user-uuid",
-    IP:        "192.168.1.1",
-    UserAgent: "Mozilla/5.0...",
+    UserID:     "user-uuid",
+    IP:         "192.168.1.1",
+    UserAgent:  "Mozilla/5.0...",
+    RememberMe: false, // optional; longer session expiry when true
 })
 // Response contains: resp.Data.SessionID, resp.Data.Secret, resp.Data.ExpiresAt
 ```
@@ -152,6 +174,22 @@ Revokes a session.
 
 ```go
 err := client.RevokeSession("session-uuid")
+```
+
+#### RevokeAllUserSessions
+
+Revokes all sessions for a user ("log out everywhere").
+
+```go
+err := client.RevokeAllUserSessions("user-uuid")
+```
+
+#### RevokeOtherSessions
+
+Revokes all sessions for a user except the given session ("log out other devices"). Use the current session ID as `exceptSessionID` so the current device stays logged in.
+
+```go
+err := client.RevokeOtherSessions("user-uuid", "current-session-uuid")
 ```
 
 #### GetSession

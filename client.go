@@ -415,6 +415,27 @@ func (c *Client) DeleteUser(userID string) error {
 	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to delete user")
 }
 
+// ChangePasswordRequest is the request body for changing a user's password
+type ChangePasswordRequest struct {
+	OldPassword *string `json:"oldPassword,omitempty"` // Optional for admin reset
+	NewPassword string  `json:"newPassword"`
+}
+
+// ChangePassword changes a user's password
+func (c *Client) ChangePassword(userID string, req ChangePasswordRequest) error {
+	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/change-password", req, []int{http.StatusOK}, nil, "failed to change password")
+}
+
+// ChangeEmailRequest is the request body for changing a user's email
+type ChangeEmailRequest struct {
+	NewEmail string `json:"newEmail"`
+}
+
+// ChangeEmail changes a user's email
+func (c *Client) ChangeEmail(userID string, req ChangeEmailRequest) error {
+	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/change-email", req, []int{http.StatusOK}, nil, "failed to change email")
+}
+
 // ListUsersResponse represents the paginated response from listing users
 type ListUsersResponse struct {
 	Success    bool                  `json:"success"`
