@@ -234,9 +234,10 @@ func (c *Client) VerifyCredentials(req VerifyCredentialsRequest) (*VerifyCredent
 
 // CreateSessionRequest represents a request to create a session
 type CreateSessionRequest struct {
-	UserID    string `json:"userId"`
-	IP        string `json:"ip"`
-	UserAgent string `json:"userAgent"`
+	UserID     string `json:"userId"`
+	IP         string `json:"ip"`
+	UserAgent  string `json:"userAgent"`
+	RememberMe bool   `json:"rememberMe"`
 }
 
 // CreateSessionResponse represents the response from creating a session
@@ -291,6 +292,22 @@ func (c *Client) ValidateSession(sessionID, secret string) (*ValidateSessionResp
 // RevokeSession revokes a session
 func (c *Client) RevokeSession(sessionID string) error {
 	return c.do("POST", apiPathPrefix+"/sessions/"+pathSeg(sessionID)+"/revoke", nil, []int{http.StatusOK}, nil, "failed to revoke session")
+}
+
+// RevokeAllUserSessions revokes all sessions for a user ("log out everywhere")
+func (c *Client) RevokeAllUserSessions(userID string) error {
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID)+"/sessions", nil, []int{http.StatusOK}, nil, "failed to revoke all user sessions")
+}
+
+// RevokeOtherSessionsRequest represents the request body for revoking other sessions
+type RevokeOtherSessionsRequest struct {
+	ExceptSessionID string `json:"exceptSessionId"`
+}
+
+// RevokeOtherSessions revokes all sessions for a user except the one given ("log out other devices")
+func (c *Client) RevokeOtherSessions(userID, exceptSessionID string) error {
+	req := RevokeOtherSessionsRequest{ExceptSessionID: exceptSessionID}
+	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/sessions/revoke-others", req, []int{http.StatusOK}, nil, "failed to revoke other sessions")
 }
 
 // CreateTokenRequest represents a request to create a token
@@ -458,13 +475,14 @@ type ListSessionsResponse struct {
 
 // SessionListItem represents a single session in the list
 type SessionListItem struct {
-	ID        string  `json:"id"`
-	UserID    string  `json:"userId"`
-	ExpiresAt string  `json:"expiresAt"`
-	RevokedAt *string `json:"revokedAt,omitempty"`
-	IP        string  `json:"ip"`
-	UserAgent string  `json:"userAgent"`
-	CreatedAt string  `json:"createdAt"`
+	ID         string  `json:"id"`
+	UserID     string  `json:"userId"`
+	ExpiresAt  string  `json:"expiresAt"`
+	RevokedAt  *string `json:"revokedAt,omitempty"`
+	RememberMe bool    `json:"rememberMe"`
+	IP         string  `json:"ip"`
+	UserAgent  string  `json:"userAgent"`
+	CreatedAt  string  `json:"createdAt"`
 }
 
 // ListSessions lists sessions by forwarding the raw query string to auth-service.
