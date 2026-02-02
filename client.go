@@ -452,9 +452,36 @@ type ChangeEmailRequest struct {
 	NewEmail string `json:"newEmail"`
 }
 
-// ChangeEmail changes a user's email
-func (c *Client) ChangeEmail(userID string, req ChangeEmailRequest) error {
-	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/change-email", req, []int{http.StatusOK}, nil, "failed to change email")
+// ChangeEmailResponse is the response from requesting an email change (token for verification email)
+type ChangeEmailResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Status  int    `json:"status"`
+	Data    struct {
+		Token     string `json:"token"`
+		ExpiresAt string `json:"expiresAt"`
+	} `json:"data"`
+}
+
+// ChangeEmail requests an email change; returns token and expiry for backend to send verification email
+func (c *Client) ChangeEmail(userID string, req ChangeEmailRequest) (*ChangeEmailResponse, error) {
+	var result ChangeEmailResponse
+	err := c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/change-email", req, []int{http.StatusOK}, &result, "failed to change email")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// VerifyEmailChangeRequest is the request body for verifying an email change
+type VerifyEmailChangeRequest struct {
+	Token string `json:"token"`
+}
+
+// VerifyEmailChange verifies an email change using a token and applies the new email
+func (c *Client) VerifyEmailChange(token string) error {
+	req := VerifyEmailChangeRequest{Token: token}
+	return c.do("POST", apiPathPrefix+"/auth/verify-email-change", req, []int{http.StatusOK}, nil, "failed to verify email change")
 }
 
 // BlockUser blocks a user (POST /api/v1/users/:userId/block)
