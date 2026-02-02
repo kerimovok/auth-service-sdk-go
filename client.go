@@ -289,9 +289,9 @@ func (c *Client) ValidateSession(sessionID, secret string) (*ValidateSessionResp
 	return &result, nil
 }
 
-// RevokeSession revokes a session
+// RevokeSession revokes a session (REST: DELETE /sessions/:id)
 func (c *Client) RevokeSession(sessionID string) error {
-	return c.do("POST", apiPathPrefix+"/sessions/"+pathSeg(sessionID)+"/revoke", nil, []int{http.StatusOK}, nil, "failed to revoke session")
+	return c.do("DELETE", apiPathPrefix+"/sessions/"+pathSeg(sessionID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to revoke session")
 }
 
 // RevokeAllUserSessions revokes all sessions for a user ("log out everywhere")
@@ -308,6 +308,11 @@ type RevokeOtherSessionsRequest struct {
 func (c *Client) RevokeOtherSessions(userID, exceptSessionID string) error {
 	req := RevokeOtherSessionsRequest{ExceptSessionID: exceptSessionID}
 	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/sessions/revoke-others", req, []int{http.StatusOK}, nil, "failed to revoke other sessions")
+}
+
+// RevokeUserSession revokes a single session for a user (DELETE /users/:userId/sessions/:sessionId)
+func (c *Client) RevokeUserSession(userID, sessionID string) error {
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID)+"/sessions/"+pathSeg(sessionID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to revoke user session")
 }
 
 // CreateTokenRequest represents a request to create a token
@@ -450,6 +455,26 @@ type ChangeEmailRequest struct {
 // ChangeEmail changes a user's email
 func (c *Client) ChangeEmail(userID string, req ChangeEmailRequest) error {
 	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/change-email", req, []int{http.StatusOK}, nil, "failed to change email")
+}
+
+// BlockUser blocks a user (POST /api/v1/users/:userId/block)
+func (c *Client) BlockUser(targetUserID string) (*GetUserResponse, error) {
+	var result GetUserResponse
+	err := c.do("POST", apiPathPrefix+"/users/"+pathSeg(targetUserID)+"/block", nil, []int{http.StatusOK}, &result, "failed to block user")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// UnblockUser unblocks a user (POST /api/v1/users/:userId/unblock)
+func (c *Client) UnblockUser(targetUserID string) (*GetUserResponse, error) {
+	var result GetUserResponse
+	err := c.do("POST", apiPathPrefix+"/users/"+pathSeg(targetUserID)+"/unblock", nil, []int{http.StatusOK}, &result, "failed to unblock user")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // ListUsersResponse represents the paginated response from listing users
