@@ -14,8 +14,11 @@ go get github.com/kerimovok/auth-service-sdk-go
 
 - **Type-Safe**: Full type definitions for all requests and responses
 - **Error Handling**: Comprehensive error handling with detailed error messages
-- **User Management**: Create, get, list, and delete users; change password and email
-- **Session Management**: Create, validate, revoke, get, and list user sessions; revoke all or other sessions ("log out everywhere" / "log out other devices")
+- **User Management**: Create, get, list, update, and delete users; change
+  password and email; block and unblock users
+- **Session Management**: Create, validate, revoke (DELETE), get, and list
+  sessions; list/revoke user-scoped sessions; revoke all or other sessions ("log
+  out everywhere" / "log out other devices")
 - **Token Management**: Create, verify, get, and list tokens for password reset
   and email verification
 - **Filtering & Pagination**: Support for filtering and pagination on list
@@ -86,20 +89,28 @@ user, err := client.GetUser("user-uuid")
 
 #### ListUsers
 
-Lists users with optional filters and pagination.
+Lists users with optional filters and pagination. Pass a query string (e.g.
+`page=1&per_page=20`, filter params like `email_like=example`,
+`email_verified_eq=true`, `blocked_eq=false`, `created_at_gte=2024-01-01`).
 
 ```go
-resp, err := client.ListUsers(authsdk.ListUsersRequest{
-    Email:         "user@example.com",  // Filter by email (exact match via email_eq)
-    EmailVerified: &true,                // Filter by email verification status (email_verified_eq)
-    Blocked:       &false,               // Filter by blocked status (blocked_eq)
-    Page:          1,                    // Page number (default: 1)
-    PerPage:       20,                   // Items per page (default: 20, max: 100)
-})
+resp, err := client.ListUsers("page=1&per_page=20&blocked_eq=false")
 // Access users: resp.Data (array of GetUserResponseData)
 // Access pagination: resp.Pagination
 // Each user in resp.Data contains: ID, Email, EmailVerified, Blocked,
 //                                   LastLoginAt, PasswordChangedAt, CreatedAt
+```
+
+#### UpdateUser
+
+Updates a user's emailVerified and/or blocked status.
+
+```go
+resp, err := client.UpdateUser("user-uuid", authsdk.UpdateUserRequest{
+    EmailVerified: &true,  // optional
+    Blocked:       &false, // optional
+})
+// Response: same shape as GetUser
 ```
 
 #### DeleteUser
@@ -112,7 +123,8 @@ err := client.DeleteUser("user-uuid")
 
 #### ChangePassword
 
-Changes a user's password. For self-service, provide `OldPassword`; omit it for admin reset.
+Changes a user's password. For self-service, provide `OldPassword`; omit it for
+admin reset.
 
 ```go
 err := client.ChangePassword("user-uuid", authsdk.ChangePasswordRequest{
@@ -123,12 +135,32 @@ err := client.ChangePassword("user-uuid", authsdk.ChangePasswordRequest{
 
 #### ChangeEmail
 
-Changes a user's email. The new email will be unverified until the user completes verification.
+Changes a user's email. The new email will be unverified until the user
+completes verification.
 
 ```go
 err := client.ChangeEmail("user-uuid", authsdk.ChangeEmailRequest{
     NewEmail: "newemail@example.com",
 })
+```
+
+#### BlockUser
+
+Blocks a user (sets `blocked=true` and revokes all their sessions in
+auth-service).
+
+```go
+resp, err := client.BlockUser("user-uuid")
+// Response: same shape as GetUser (updated user with blocked: true)
+```
+
+#### UnblockUser
+
+Unblocks a user (sets `blocked=false`).
+
+```go
+resp, err := client.UnblockUser("user-uuid")
+// Response: same shape as GetUser (updated user with blocked: false)
 ```
 
 #### VerifyCredentials
@@ -147,7 +179,8 @@ resp, err := client.VerifyCredentials(authsdk.VerifyCredentialsRequest{
 
 #### CreateSession
 
-Creates a new session for a user. Set `RememberMe` to true for longer-lived sessions (when the auth-service is configured for it).
+Creates a new session for a user. Set `RememberMe` to true for longer-lived
+sessions (when the auth-service is configured for it).
 
 ```go
 resp, err := client.CreateSession(authsdk.CreateSessionRequest{
@@ -170,10 +203,19 @@ resp, err := client.ValidateSession("session-uuid", "session-secret")
 
 #### RevokeSession
 
-Revokes a session.
+Revokes a session by ID (REST: DELETE /sessions/:id).
 
 ```go
 err := client.RevokeSession("session-uuid")
+```
+
+#### RevokeUserSession
+
+Revokes a single session for a user (DELETE /users/:userId/sessions/:sessionId).
+Use when revoking a specific session in a user-scoped context.
+
+```go
+err := client.RevokeUserSession("user-uuid", "session-uuid")
 ```
 
 #### RevokeAllUserSessions
@@ -186,7 +228,9 @@ err := client.RevokeAllUserSessions("user-uuid")
 
 #### RevokeOtherSessions
 
-Revokes all sessions for a user except the given session ("log out other devices"). Use the current session ID as `exceptSessionID` so the current device stays logged in.
+Revokes all sessions for a user except the given session ("log out other
+devices"). Use the current session ID as `exceptSessionID` so the current device
+stays logged in.
 
 ```go
 err := client.RevokeOtherSessions("user-uuid", "current-session-uuid")
@@ -205,22 +249,19 @@ session, err := client.GetSession("session-uuid")
 
 #### ListSessions
 
-Lists sessions with optional filters and pagination.
+Lists sessions with optional filters and pagination. Pass a query string (e.g.
+`page=1&per_page=20`, `user_id_eq=uuid`, `status=active`, `ip_like=192.168`).
 
 ```go
-resp, err := client.ListSessions(authsdk.ListSessionsRequest{
-    UserID:    "user-uuid",        // Filter by user ID (user_id)
-    Status:    "active",            // Filter by status: "active", "revoked", "expired"
-    IP:        "192.168.1",         // Filter by IP (ip_like - supports partial match)
-    UserAgent: "Mozilla",           // Filter by user agent (user_agent_like - supports partial match)
-    Page:      1,                   // Page number
-    PerPage:   20,                  // Items per page
-})
+resp, err := client.ListSessions("page=1&per_page=20&user_id_eq=user-uuid&status=active")
 // Access sessions: resp.Data (array of SessionListItem)
 // Access pagination: resp.Pagination
 // Each session in resp.Data contains: ID, UserID, ExpiresAt, RevokedAt,
 //                                       IP, UserAgent, CreatedAt
 ```
+
+To list sessions for a single user, use `ListSessions("user_id_eq="+userID)` or
+add other query params (e.g. `&status=active`).
 
 ### Token Operations
 
@@ -267,16 +308,12 @@ token, err := client.GetToken("token-uuid")
 
 #### ListTokens
 
-Lists tokens with optional filters and pagination.
+Lists tokens with optional filters and pagination. Pass a query string (e.g.
+`page=1&per_page=20`, `user_id_eq=uuid`, `type_eq=password_reset`,
+`status=active`).
 
 ```go
-resp, err := client.ListTokens(authsdk.ListTokensRequest{
-    UserID:  "user-uuid",           // Filter by user ID (user_id)
-    Type:    "password_reset",      // Filter by type: "password_reset" or "email_verify" (type_eq)
-    Status:  "active",              // Filter by status: "active", "used", "expired"
-    Page:    1,                     // Page number
-    PerPage: 20,                    // Items per page
-})
+resp, err := client.ListTokens("page=1&per_page=20&user_id_eq=user-uuid&type_eq=password_reset")
 // Access tokens: resp.Data (array of TokenListItem)
 // Access pagination: resp.Pagination
 // Each token in resp.Data contains: ID, UserID, Type, ExpiresAt, UsedAt, CreatedAt
