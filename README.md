@@ -19,8 +19,9 @@ go get github.com/kerimovok/auth-service-sdk-go
 - **Session Management**: Create, validate, revoke (DELETE), get, and list
   sessions; list/revoke user-scoped sessions; revoke all or other sessions ("log
   out everywhere" / "log out other devices")
-- **Token Management**: Create, verify, get, and list tokens for password reset
-  and email verification
+- **Token Management**: Create, verify, get, list, and revoke tokens;
+  list/revoke user-scoped tokens (list user tokens, revoke one or all for a
+  user)
 - **Filtering & Pagination**: Support for filtering and pagination on list
   endpoints
 
@@ -303,20 +304,58 @@ Retrieves a token by ID.
 ```go
 token, err := client.GetToken("token-uuid")
 // Response contains: token.Data.ID, token.Data.UserID, token.Data.Type,
-//                     token.Data.ExpiresAt, token.Data.UsedAt, token.Data.CreatedAt
+//                     token.Data.ExpiresAt, token.Data.UsedAt, token.Data.RevokedAt,
+//                     token.Data.CreatedAt
+```
+
+#### RevokeToken
+
+Revokes a token by ID (REST: DELETE /api/v1/tokens/:id). Idempotent: returns
+success if the token is already revoked.
+
+```go
+err := client.RevokeToken("token-uuid")
+```
+
+#### RevokeAllUserTokens
+
+Revokes all tokens for a user (DELETE /api/v1/users/:userId/tokens).
+
+```go
+err := client.RevokeAllUserTokens("user-uuid")
+```
+
+#### ListUserTokens
+
+Lists tokens for a user (GET /api/v1/users/:userId/tokens). Pass a query string
+for filters and pagination (e.g. `page=1&per_page=20&status=active`,
+`type_eq=password_reset`).
+
+```go
+resp, err := client.ListUserTokens("user-uuid", "page=1&per_page=20&status=active")
+// Same response shape as ListTokens: resp.Data ([]TokenListItem), resp.Pagination
+```
+
+#### RevokeUserToken
+
+Revokes a single token for a user (DELETE
+/api/v1/users/:userId/tokens/:tokenId). Verifies the token belongs to that user.
+
+```go
+err := client.RevokeUserToken("user-uuid", "token-uuid")
 ```
 
 #### ListTokens
 
 Lists tokens with optional filters and pagination. Pass a query string (e.g.
 `page=1&per_page=20`, `user_id_eq=uuid`, `type_eq=password_reset`,
-`status=active`).
+`status=active` or `status=revoked`).
 
 ```go
 resp, err := client.ListTokens("page=1&per_page=20&user_id_eq=user-uuid&type_eq=password_reset")
 // Access tokens: resp.Data (array of TokenListItem)
 // Access pagination: resp.Pagination
-// Each token in resp.Data contains: ID, UserID, Type, ExpiresAt, UsedAt, CreatedAt
+// Each token in resp.Data contains: ID, UserID, Type, ExpiresAt, UsedAt, RevokedAt, CreatedAt
 ```
 
 ## Configuration

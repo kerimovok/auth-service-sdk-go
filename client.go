@@ -342,6 +342,35 @@ func (c *Client) CreateToken(req CreateTokenRequest) (*CreateTokenResponse, erro
 	return &result, nil
 }
 
+// RevokeToken revokes a token by ID (DELETE /api/v1/tokens/:id)
+func (c *Client) RevokeToken(tokenID string) error {
+	return c.do("DELETE", apiPathPrefix+"/tokens/"+pathSeg(tokenID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to revoke token")
+}
+
+// RevokeAllUserTokens revokes all tokens for a user (DELETE /api/v1/users/:userId/tokens)
+func (c *Client) RevokeAllUserTokens(userID string) error {
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID)+"/tokens", nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to revoke all user tokens")
+}
+
+// ListUserTokens lists tokens for a user (GET /api/v1/users/:userId/tokens). Pass query string for filters/pagination (e.g. page=1&per_page=20&status=active&type_eq=password_reset).
+func (c *Client) ListUserTokens(userID string, queryString string) (*ListTokensResponse, error) {
+	path := apiPathPrefix + "/users/" + pathSeg(userID) + "/tokens"
+	if queryString != "" {
+		path += "?" + queryString
+	}
+	var result ListTokensResponse
+	err := c.do("GET", path, nil, []int{http.StatusOK}, &result, "failed to list user tokens")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// RevokeUserToken revokes a single token for a user (DELETE /api/v1/users/:userId/tokens/:tokenId). Verifies token belongs to user.
+func (c *Client) RevokeUserToken(userID, tokenID string) error {
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID)+"/tokens/"+pathSeg(tokenID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to revoke user token")
+}
+
 // VerifyEmailRequest represents a request to verify email
 type VerifyEmailRequest struct {
 	Token string `json:"token"`
@@ -624,6 +653,7 @@ type TokenListItem struct {
 	Type      string  `json:"type"`
 	ExpiresAt string  `json:"expiresAt"`
 	UsedAt    *string `json:"usedAt,omitempty"`
+	RevokedAt *string `json:"revokedAt,omitempty"`
 	CreatedAt string  `json:"createdAt"`
 }
 
