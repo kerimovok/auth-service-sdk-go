@@ -104,12 +104,13 @@ resp, err := client.ListUsers("page=1&per_page=20&blocked_eq=false")
 
 #### UpdateUser
 
-Updates a user's emailVerified and/or blocked status.
+Updates a user's email, emailVerified, and/or blocked status.
 
 ```go
 resp, err := client.UpdateUser("user-uuid", authsdk.UpdateUserRequest{
-    EmailVerified: &true,  // optional
-    Blocked:       &false, // optional
+    Email:         &newEmail, // optional
+    EmailVerified: &true,     // optional
+    Blocked:       &false,    // optional
 })
 // Response: same shape as GetUser
 ```

@@ -449,10 +449,11 @@ func (c *Client) DeleteUser(userID string) error {
 	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID), nil, []int{http.StatusOK, http.StatusNoContent}, nil, "failed to delete user")
 }
 
-// UpdateUserRequest is the request body for updating a user (emailVerified, blocked)
+// UpdateUserRequest is the request body for updating a user (email, emailVerified, blocked)
 type UpdateUserRequest struct {
-	EmailVerified *bool `json:"emailVerified,omitempty"`
-	Blocked       *bool `json:"blocked,omitempty"`
+	Email         *string `json:"email,omitempty"`
+	EmailVerified *bool   `json:"emailVerified,omitempty"`
+	Blocked       *bool   `json:"blocked,omitempty"`
 }
 
 // UpdateUser updates a user's emailVerified and blocked status (PATCH /api/v1/users/:id)
