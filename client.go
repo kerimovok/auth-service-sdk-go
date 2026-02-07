@@ -424,13 +424,15 @@ type GetUserResponse struct {
 	Status    int    `json:"status"`
 	Timestamp string `json:"timestamp"`
 	Data      struct {
-		ID                string  `json:"id"`
-		Email             string  `json:"email"`
-		EmailVerified     bool    `json:"emailVerified"`
-		Blocked           bool    `json:"blocked"`
-		LastLoginAt       *string `json:"lastLoginAt,omitempty"`
-		PasswordChangedAt *string `json:"passwordChangedAt,omitempty"`
-		CreatedAt         string  `json:"createdAt"`
+		ID                 string  `json:"id"`
+		Email              string  `json:"email"`
+		EmailVerified      bool    `json:"emailVerified"`
+		Blocked            bool    `json:"blocked"`
+		LastLoginAt        *string `json:"lastLoginAt,omitempty"`
+		LastLoginIP        string  `json:"lastLoginIP,omitempty"`
+		LastLoginUserAgent string  `json:"lastLoginUserAgent,omitempty"`
+		PasswordChangedAt  *string `json:"passwordChangedAt,omitempty"`
+		CreatedAt          string  `json:"createdAt"`
 	} `json:"data"`
 }
 
@@ -558,13 +560,15 @@ type Pagination struct {
 
 // GetUserResponseData represents a single user in the list
 type GetUserResponseData struct {
-	ID                string  `json:"id"`
-	Email             string  `json:"email"`
-	EmailVerified     bool    `json:"emailVerified"`
-	Blocked           bool    `json:"blocked"`
-	LastLoginAt       *string `json:"lastLoginAt,omitempty"`
-	PasswordChangedAt *string `json:"passwordChangedAt,omitempty"`
-	CreatedAt         string  `json:"createdAt"`
+	ID                 string  `json:"id"`
+	Email              string  `json:"email"`
+	EmailVerified      bool    `json:"emailVerified"`
+	Blocked            bool    `json:"blocked"`
+	LastLoginAt        *string `json:"lastLoginAt,omitempty"`
+	LastLoginIP        string  `json:"lastLoginIP,omitempty"`
+	LastLoginUserAgent string  `json:"lastLoginUserAgent,omitempty"`
+	PasswordChangedAt  *string `json:"passwordChangedAt,omitempty"`
+	CreatedAt          string  `json:"createdAt"`
 }
 
 // ListUsers lists users by forwarding the raw query string to auth-service.

@@ -84,7 +84,8 @@ Retrieves a user by ID.
 ```go
 user, err := client.GetUser("user-uuid")
 // Response contains: user.Data.ID, user.Data.Email, user.Data.EmailVerified,
-//                     user.Data.Blocked, user.Data.LastLoginAt, user.Data.PasswordChangedAt,
+//                     user.Data.Blocked, user.Data.LastLoginAt, user.Data.LastLoginIP,
+//                     user.Data.LastLoginUserAgent, user.Data.PasswordChangedAt,
 //                     user.Data.CreatedAt
 ```
 
@@ -99,7 +100,8 @@ resp, err := client.ListUsers("page=1&per_page=20&blocked_eq=false")
 // Access users: resp.Data (array of GetUserResponseData)
 // Access pagination: resp.Pagination
 // Each user in resp.Data contains: ID, Email, EmailVerified, Blocked,
-//                                   LastLoginAt, PasswordChangedAt, CreatedAt
+//                                   LastLoginAt, LastLoginIP, LastLoginUserAgent,
+//                                   PasswordChangedAt, CreatedAt
 ```
 
 #### UpdateUser
