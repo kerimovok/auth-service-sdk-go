@@ -216,9 +216,10 @@ type VerifyCredentialsResponse struct {
 	Message string `json:"message"`
 	Status  int    `json:"status"`
 	Data    struct {
-		OK      bool   `json:"ok"`
-		UserID  string `json:"userId"`
-		Blocked bool   `json:"blocked"`
+		OK            bool   `json:"ok"`
+		UserID        string `json:"userId"`
+		Blocked       bool   `json:"blocked"`
+		EmailVerified bool   `json:"emailVerified"`
 	} `json:"data"`
 }
 

@@ -169,14 +169,17 @@ resp, err := client.UnblockUser("user-uuid")
 
 #### VerifyCredentials
 
-Verifies user credentials (email and password).
+Verifies user credentials (email and password). On success, `Data` includes
+whether the account email is verified (`EmailVerified`), in addition to `OK`,
+`UserID`, and `Blocked`.
 
 ```go
 resp, err := client.VerifyCredentials(authsdk.VerifyCredentialsRequest{
     Email:    "user@example.com",
     Password: "securePassword123",
 })
-// Response contains: resp.Data.OK, resp.Data.UserID, resp.Data.Blocked
+// Response contains: resp.Data.OK, resp.Data.UserID, resp.Data.Blocked,
+// resp.Data.EmailVerified
 ```
 
 ### Session Operations
