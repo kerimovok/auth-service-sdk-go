@@ -2,7 +2,7 @@
 
 A Go SDK for interacting with the auth-service microservice. This SDK provides a
 type-safe client for all auth-service operations including user management,
-session handling, and token operations.
+session handling, token operations, and OAuth identity management.
 
 ## Installation
 
@@ -22,8 +22,8 @@ go get github.com/kerimovok/auth-service-sdk-go
 - **Token Management**: Create, verify, get, list, and revoke tokens;
   list/revoke user-scoped tokens (list user tokens, revoke one or all for a
   user)
-- **OAuth Identities**: Resolve login/signup, list, link, and unlink provider
-  identities (requires auth-service v1.2.0+)
+- **OAuth Identities**: Resolve login/signup, list, link, and unlink linked
+  provider accounts
 - **Filtering & Pagination**: Support for filtering and pagination on list
   endpoints
 
@@ -70,12 +70,12 @@ func main() {
 #### CreateUser
 
 Creates a new user in the auth-service. Password is optional — omit it for
-OAuth-only users created via `ResolveOAuth`.
+OAuth-only users (typically created via `ResolveOAuth` rather than `CreateUser`).
 
 ```go
 resp, err := client.CreateUser(authsdk.CreateUserRequest{
     Email:         "user@example.com",
-    Password:      "securePassword123",
+    Password:      "securePassword123", // optional
     EmailVerified: false,
 })
 ```
@@ -174,7 +174,8 @@ resp, err := client.UnblockUser("user-uuid")
 
 Verifies user credentials (email and password). On success, `Data` includes
 whether the account email is verified (`EmailVerified`), in addition to `OK`,
-`UserID`, and `Blocked`.
+`UserID`, and `Blocked`. Returns `OK: false` for OAuth-only users who have no
+password set.
 
 ```go
 resp, err := client.VerifyCredentials(authsdk.VerifyCredentialsRequest{
@@ -369,12 +370,14 @@ resp, err := client.ListTokens("page=1&per_page=20&user_id_eq=user-uuid&type_eq=
 
 ### OAuth Identity Operations
 
-Requires auth-service **v1.2.0+**. The main backend validates Google OAuth and
-calls these endpoints; auth-service stores provider identities.
+The Main Backend validates OAuth with the provider (redirect, token exchange,
+userinfo) and calls auth-service to persist and manage linked identities.
 
 #### ResolveOAuth
 
 Resolves an OAuth login or signup after the caller validates provider userinfo.
+Looks up by provider ID first, then auto-links by email, or creates a new
+passwordless user.
 
 ```go
 resp, err := client.ResolveOAuth(authsdk.OAuthIdentityInput{
@@ -383,21 +386,21 @@ resp, err := client.ResolveOAuth(authsdk.OAuthIdentityInput{
     Email:          "user@gmail.com",
     EmailVerified:  true,
 })
-// Response: resp.Data.UserID, resp.Data.IsNewUser, resp.Data.LinkedBy ("provider" or "email")
+// resp.Data.UserID, resp.Data.IsNewUser, resp.Data.LinkedBy ("provider" or "email")
 ```
 
 #### ListOAuthIdentities
 
-Lists linked OAuth providers for account settings.
+Lists linked OAuth providers for a user (account settings).
 
 ```go
 resp, err := client.ListOAuthIdentities("user-uuid")
-// Response: resp.Data ([]OAuthIdentityListItem with Provider, ProviderEmail, CreatedAt)
+// resp.Data: []OAuthIdentityListItem { Provider, ProviderEmail, CreatedAt }
 ```
 
 #### LinkOAuthIdentity
 
-Links a provider to an existing user (account settings "Connect Google" flow).
+Links a provider to an existing user (account settings "Connect" flow).
 
 ```go
 err := client.LinkOAuthIdentity("user-uuid", authsdk.OAuthIdentityInput{
@@ -411,11 +414,14 @@ err := client.LinkOAuthIdentity("user-uuid", authsdk.OAuthIdentityInput{
 #### UnlinkOAuthIdentity
 
 Unlinks a provider. Returns HTTP 400 if the user would have no remaining auth
-method (no password and no other OAuth identities).
+method (no password and no other linked providers).
 
 ```go
 err := client.UnlinkOAuthIdentity("user-uuid", authsdk.OAuthProviderGoogle)
 ```
+
+Provider constants are available (e.g. `authsdk.OAuthProviderGoogle`). Pass any
+provider string supported by your auth-service deployment.
 
 ## Configuration
 
@@ -490,6 +496,7 @@ All requests and responses use camelCase JSON field names:
 - `userId` (not `user_id`)
 - `emailVerified` (not `email_verified`)
 - `sessionId` (not `session_id`)
+- `providerUserId` (not `provider_user_id`)
 - `expiresAt` (not `expires_at`)
 - etc.
 
