@@ -22,6 +22,8 @@ go get github.com/kerimovok/auth-service-sdk-go
 - **Token Management**: Create, verify, get, list, and revoke tokens;
   list/revoke user-scoped tokens (list user tokens, revoke one or all for a
   user)
+- **OAuth Identities**: Resolve login/signup, list, link, and unlink provider
+  identities (requires auth-service v1.2.0+)
 - **Filtering & Pagination**: Support for filtering and pagination on list
   endpoints
 
@@ -67,7 +69,8 @@ func main() {
 
 #### CreateUser
 
-Creates a new user in the auth-service.
+Creates a new user in the auth-service. Password is optional — omit it for
+OAuth-only users created via `ResolveOAuth`.
 
 ```go
 resp, err := client.CreateUser(authsdk.CreateUserRequest{
@@ -362,6 +365,56 @@ resp, err := client.ListTokens("page=1&per_page=20&user_id_eq=user-uuid&type_eq=
 // Access tokens: resp.Data (array of TokenListItem)
 // Access pagination: resp.Pagination
 // Each token in resp.Data contains: ID, UserID, Type, ExpiresAt, UsedAt, RevokedAt, CreatedAt
+```
+
+### OAuth Identity Operations
+
+Requires auth-service **v1.2.0+**. The main backend validates Google OAuth and
+calls these endpoints; auth-service stores provider identities.
+
+#### ResolveOAuth
+
+Resolves an OAuth login or signup after the caller validates provider userinfo.
+
+```go
+resp, err := client.ResolveOAuth(authsdk.OAuthIdentityInput{
+    Provider:       authsdk.OAuthProviderGoogle,
+    ProviderUserID: "google-sub-id",
+    Email:          "user@gmail.com",
+    EmailVerified:  true,
+})
+// Response: resp.Data.UserID, resp.Data.IsNewUser, resp.Data.LinkedBy ("provider" or "email")
+```
+
+#### ListOAuthIdentities
+
+Lists linked OAuth providers for account settings.
+
+```go
+resp, err := client.ListOAuthIdentities("user-uuid")
+// Response: resp.Data ([]OAuthIdentityListItem with Provider, ProviderEmail, CreatedAt)
+```
+
+#### LinkOAuthIdentity
+
+Links a provider to an existing user (account settings "Connect Google" flow).
+
+```go
+err := client.LinkOAuthIdentity("user-uuid", authsdk.OAuthIdentityInput{
+    Provider:       authsdk.OAuthProviderGoogle,
+    ProviderUserID: "google-sub-id",
+    Email:          "user@gmail.com",
+    EmailVerified:  true,
+})
+```
+
+#### UnlinkOAuthIdentity
+
+Unlinks a provider. Returns HTTP 400 if the user would have no remaining auth
+method (no password and no other OAuth identities).
+
+```go
+err := client.UnlinkOAuthIdentity("user-uuid", authsdk.OAuthProviderGoogle)
 ```
 
 ## Configuration

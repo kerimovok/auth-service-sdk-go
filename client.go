@@ -35,6 +35,11 @@ const (
 	SessionStatusExpired = sessionExpired
 )
 
+// OAuth provider constants
+const (
+	OAuthProviderGoogle = "google"
+)
+
 // Config holds configuration for the auth service client
 type Config struct {
 	BaseURL string        // Auth service base URL (e.g., "http://localhost:3001")
@@ -177,10 +182,11 @@ func NewClient(config Config) (*Client, error) {
 	}, nil
 }
 
-// CreateUserRequest represents a request to create a user
+// CreateUserRequest represents a request to create a user.
+// Password is optional — omit for OAuth-only users created via ResolveOAuth.
 type CreateUserRequest struct {
 	Email         string `json:"email"`
-	Password      string `json:"password"`
+	Password      string `json:"password,omitempty"`
 	EmailVerified bool   `json:"emailVerified"`
 }
 
@@ -694,4 +700,71 @@ func (c *Client) GetToken(tokenID string) (*GetTokenResponse, error) {
 		return nil, err
 	}
 	return &result, nil
+}
+
+// OAuthIdentityInput is the shared body for resolve and link OAuth operations.
+type OAuthIdentityInput struct {
+	Provider       string `json:"provider"`
+	ProviderUserID string `json:"providerUserId"`
+	Email          string `json:"email"`
+	EmailVerified  bool   `json:"emailVerified"`
+}
+
+// ResolveOAuthResponse represents the response from resolving an OAuth login/signup.
+type ResolveOAuthResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Status  int    `json:"status"`
+	Data    struct {
+		UserID    string `json:"userId"`
+		IsNewUser bool   `json:"isNewUser"`
+		LinkedBy  string `json:"linkedBy"` // "provider" or "email"
+	} `json:"data"`
+}
+
+// ResolveOAuth resolves an OAuth login or signup from provider profile data.
+// Called by the main backend after validating Google userinfo.
+func (c *Client) ResolveOAuth(req OAuthIdentityInput) (*ResolveOAuthResponse, error) {
+	var result ResolveOAuthResponse
+	err := c.do("POST", apiPathPrefix+"/auth/oauth/resolve", req, []int{http.StatusOK}, &result, "failed to resolve oauth")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// OAuthIdentityListItem is a linked provider for account settings.
+type OAuthIdentityListItem struct {
+	Provider      string `json:"provider"`
+	ProviderEmail string `json:"providerEmail"`
+	CreatedAt     string `json:"createdAt"`
+}
+
+// ListOAuthIdentitiesResponse represents linked OAuth providers for a user.
+type ListOAuthIdentitiesResponse struct {
+	Success bool                    `json:"success"`
+	Message string                  `json:"message"`
+	Status  int                     `json:"status"`
+	Data    []OAuthIdentityListItem `json:"data"`
+}
+
+// ListOAuthIdentities lists linked OAuth providers for a user.
+func (c *Client) ListOAuthIdentities(userID string) (*ListOAuthIdentitiesResponse, error) {
+	var result ListOAuthIdentitiesResponse
+	err := c.do("GET", apiPathPrefix+"/users/"+pathSeg(userID)+"/oauth-identities", nil, []int{http.StatusOK}, &result, "failed to list oauth identities")
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// LinkOAuthIdentity links an OAuth provider to an existing user (account settings flow).
+func (c *Client) LinkOAuthIdentity(userID string, req OAuthIdentityInput) error {
+	return c.do("POST", apiPathPrefix+"/users/"+pathSeg(userID)+"/oauth-identities", req, []int{http.StatusOK}, nil, "failed to link oauth identity")
+}
+
+// UnlinkOAuthIdentity removes a linked OAuth provider from a user.
+// Returns 400 if this would remove the user's last authentication method.
+func (c *Client) UnlinkOAuthIdentity(userID, provider string) error {
+	return c.do("DELETE", apiPathPrefix+"/users/"+pathSeg(userID)+"/oauth-identities/"+pathSeg(provider), nil, []int{http.StatusOK}, nil, "failed to unlink oauth identity")
 }
